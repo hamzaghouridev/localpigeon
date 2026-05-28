@@ -1,5 +1,6 @@
 import http from 'node:http';
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
@@ -184,11 +185,27 @@ export function createWsServer(httpServer) {
   return { wss, registry };
 }
 
+function lanAddress() {
+  const ifaces = os.networkInterfaces();
+  for (const list of Object.values(ifaces)) {
+    for (const info of list || []) {
+      if (info.family === 'IPv4' && !info.internal) return info.address;
+    }
+  }
+  return null;
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const server = createHttpServer();
   createWsServer(server);
   const port = Number(process.env.PORT) || 8080;
   server.listen(port, '0.0.0.0', () => {
-    console.log(`HTTP server listening on http://localhost:${port}`);
+    const lan = lanAddress();
+    console.log('');
+    console.log('  LAN File Share is running');
+    console.log('');
+    console.log(`  On this device:   http://localhost:${port}`);
+    if (lan) console.log(`  Other devices:    http://${lan}:${port}`);
+    console.log('');
   });
 }
