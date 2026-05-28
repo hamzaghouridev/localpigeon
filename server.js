@@ -202,7 +202,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   server.listen(port, '0.0.0.0', () => {
     const lan = lanAddress();
     console.log('');
-    console.log('  LAN File Share is running');
+    console.log('  LocalPigeon is running');
     console.log('');
     console.log(`  On this device:   http://localhost:${port}`);
     if (lan) console.log(`  Other devices:    http://${lan}:${port}`);

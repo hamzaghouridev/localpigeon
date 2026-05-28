@@ -1,4 +1,4 @@
-# LAN File Share
+# LocalPigeon
 
 Share files between devices on the same WiFi, straight from your browser. One machine runs a small Node server; every device opens the same URL. Files stream from sender to receiver through a WebSocket without ever touching the cloud.
 

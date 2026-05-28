@@ -1,5 +1,5 @@
 {
-  "name": "lan-file-share",
+  "name": "localpigeon",
   "version": "0.1.0",
   "description": "Share files between devices on the same WiFi from your browser.",
   "type": "module",
