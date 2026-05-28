@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { generateName } from '../lib/name.js';
+import { ADJECTIVES, ANIMALS, generateName } from '../lib/name.js';
 
 test('returns a two-word name', () => {
   const name = generateName(new Set());
@@ -21,12 +21,7 @@ test('avoids names already in the set', () => {
 
 test('falls back to numeric suffix when adjective+animal space is exhausted', () => {
   const existing = new Set();
-  for (let i = 0; i < 1000; i++) existing.add(`Calm Falcon`);
-  const colliding = new Set(['Calm Falcon']);
-  for (let i = 0; i < 200; i++) {
-    const n = generateName(colliding);
-    colliding.add(n);
-  }
-  const suffixed = [...colliding].filter(n => / #\d+$/.test(n));
-  assert.ok(suffixed.length > 0, 'expected at least one suffixed name');
+  for (const adj of ADJECTIVES) for (const animal of ANIMALS) existing.add(`${adj} ${animal}`);
+  const next = generateName(existing);
+  assert.match(next, / #\d+$/, `expected numeric suffix, got ${next}`);
 });
