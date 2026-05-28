@@ -55,9 +55,15 @@ function broadcastPeerList(registry, wss) {
   }
 }
 
+const ROUTABLE_TYPES = new Set([
+  'offer', 'accept', 'reject', 'cancel', 'transfer-complete'
+]);
+
 export function createWsServer(httpServer) {
   const wss = new WebSocketServer({ server: httpServer });
   const registry = new PeerRegistry();
+  const transfers = new Map();
+  const pendingOffers = new Map();
 
   wss.on('connection', (ws) => {
     const peer = registry.add(ws);
@@ -75,12 +81,71 @@ export function createWsServer(httpServer) {
     });
 
     ws.on('message', (data, isBinary) => {
-      if (!isBinary) {
-        if (data.length > MAX_CONTROL_BYTES) {
-          ws.close();
+      if (isBinary) return; // binary handled in Task 8
+      if (data.length > MAX_CONTROL_BYTES) { ws.close(); return; }
+
+      let msg;
+      try { msg = JSON.parse(data.toString()); }
+      catch { return; }
+
+      if (!msg || typeof msg.type !== 'string') return;
+      if (!ROUTABLE_TYPES.has(msg.type)) return;
+
+      const sender = registry.getBySocket(ws);
+      if (!sender) return;
+
+      if (msg.type === 'offer') {
+        const dest = registry.get(msg.toPeerId);
+        if (!dest) {
+          sendJson(ws, { type: 'cancel', transferId: msg.transferId, reason: 'peer-not-found' });
           return;
         }
-        // routing handled in Task 7
+        pendingOffers.set(msg.transferId, { senderWs: ws });
+        sendJson(dest.ws, {
+          type: 'offer',
+          transferId: msg.transferId,
+          fromPeerId: sender.peerId,
+          fromName: sender.name,
+          filename: String(msg.filename || 'file'),
+          size: Number(msg.size) || 0,
+          mime: String(msg.mime || 'application/octet-stream')
+        });
+        return;
+      }
+
+      if (msg.type === 'accept') {
+        const entry = pendingOffers.get(msg.transferId);
+        if (!entry) return;
+        pendingOffers.delete(msg.transferId);
+        transfers.set(msg.transferId, { senderWs: entry.senderWs, receiverWs: ws });
+        sendJson(entry.senderWs, { type: 'accept', transferId: msg.transferId });
+        return;
+      }
+
+      if (msg.type === 'reject') {
+        const entry = pendingOffers.get(msg.transferId);
+        if (!entry) return;
+        pendingOffers.delete(msg.transferId);
+        sendJson(entry.senderWs, { type: 'reject', transferId: msg.transferId });
+        return;
+      }
+
+      if (msg.type === 'cancel') {
+        const entry = transfers.get(msg.transferId) || pendingOffers.get(msg.transferId);
+        if (!entry) return;
+        transfers.delete(msg.transferId);
+        pendingOffers.delete(msg.transferId);
+        const other = entry.senderWs === ws ? entry.receiverWs : entry.senderWs;
+        if (other) sendJson(other, { type: 'cancel', transferId: msg.transferId, reason: msg.reason || 'cancelled' });
+        return;
+      }
+
+      if (msg.type === 'transfer-complete') {
+        const entry = transfers.get(msg.transferId);
+        if (!entry) return;
+        transfers.delete(msg.transferId);
+        sendJson(entry.receiverWs, { type: 'transfer-complete', transferId: msg.transferId });
+        return;
       }
     });
   });
