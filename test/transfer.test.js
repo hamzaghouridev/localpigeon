@@ -87,3 +87,32 @@ test('end-to-end transfer of 1 MB between two peers', async () => {
     await new Promise(r => http.close(r));
   }
 });
+
+test('sender is notified when receiver disconnects mid-transfer', async () => {
+  const { http, url } = await startServer();
+  try {
+    const a = new WebSocket(url);
+    const b = new WebSocket(url);
+    const helloA = await nextMessage(a, m => m.type === 'hello');
+    const helloB = await nextMessage(b, m => m.type === 'hello');
+
+    const transferId = randomUUID();
+    a.send(JSON.stringify({
+      type: 'offer', transferId, toPeerId: helloB.peerId,
+      filename: 'x.bin', size: 999999, mime: 'application/octet-stream'
+    }));
+    await nextMessage(b, m => m.type === 'offer');
+    b.send(JSON.stringify({ type: 'accept', transferId }));
+    await nextMessage(a, m => m.type === 'accept');
+
+    b.terminate();
+
+    const cancel = await nextMessage(a, m => m.type === 'cancel');
+    assert.equal(cancel.transferId, transferId);
+    assert.equal(cancel.reason, 'receiver-disconnected');
+
+    a.close();
+  } finally {
+    await new Promise(r => http.close(r));
+  }
+});
