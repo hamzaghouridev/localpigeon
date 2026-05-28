@@ -2,9 +2,44 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LAN File Share</title>
+<link rel="stylesheet" href="/style.css">
 </head>
 <body>
-<p>Server is up. UI coming.</p>
+<main>
+  <header class="who">
+    <div class="label">You are</div>
+    <h1 id="me">connecting…</h1>
+  </header>
+
+  <section id="drop" class="drop">
+    <p class="drop-hint">Drop files here</p>
+    <input id="file-input" type="file" multiple hidden>
+    <button id="browse" type="button">or browse</button>
+  </section>
+
+  <section class="peers" aria-label="Other devices">
+    <div class="label">Send to</div>
+    <ul id="peer-list"></ul>
+    <p id="peers-empty" class="muted">No other devices yet. Open this page on another device on the same WiFi.</p>
+  </section>
+
+  <section class="log">
+    <div class="label">Recent</div>
+    <ul id="transfer-log"></ul>
+  </section>
+</main>
+
+<dialog id="incoming">
+  <p><strong id="incoming-from"></strong> wants to send you</p>
+  <p><span id="incoming-file"></span> (<span id="incoming-size"></span>)</p>
+  <form method="dialog">
+    <button id="incoming-reject" value="reject">Reject</button>
+    <button id="incoming-accept" value="accept" autofocus>Accept</button>
+  </form>
+</dialog>
+
+<script type="module" src="/app.js"></script>
 </body>
 </html>
