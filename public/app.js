@@ -66,8 +66,61 @@ function renderPeers() {
   }
 }
 
+const incomingDialog = document.getElementById('incoming');
+const incomingFrom = document.getElementById('incoming-from');
+const incomingFile = document.getElementById('incoming-file');
+const incomingSize = document.getElementById('incoming-size');
+const acceptBtn = document.getElementById('incoming-accept');
+const rejectBtn = document.getElementById('incoming-reject');
+
+const incoming = new Map();
+let pendingOffer = null;
+
+function humanSize(bytes) {
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let i = 0; let n = bytes;
+  while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+  return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)} ${units[i]}`;
+}
+
+function transferIdFromFrame(buf) {
+  const view = new Uint8Array(buf, 0, HEADER_SIZE);
+  let hex = '';
+  for (const b of view) hex += b.toString(16).padStart(2, '0');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
+function showIncomingPrompt(offer) {
+  pendingOffer = offer;
+  incomingFrom.textContent = offer.fromName;
+  incomingFile.textContent = offer.filename;
+  incomingSize.textContent = humanSize(offer.size);
+  incomingDialog.showModal();
+}
+
+acceptBtn.addEventListener('click', (e) => {
+  e.preventDefault();
+  if (!pendingOffer) return;
+  const offer = pendingOffer; pendingOffer = null;
+  incoming.set(offer.transferId, { offer, chunks: [], received: 0 });
+  addLogRow(offer.transferId, `${offer.filename} ← ${offer.fromName}`);
+  state.ws.send(JSON.stringify({ type: 'accept', transferId: offer.transferId }));
+  incomingDialog.close();
+});
+
+rejectBtn.addEventListener('click', (e) => {
+  e.preventDefault();
+  if (!pendingOffer) return;
+  const offer = pendingOffer; pendingOffer = null;
+  state.ws.send(JSON.stringify({ type: 'reject', transferId: offer.transferId }));
+  incomingDialog.close();
+});
+
 function onControl(msg) {
   switch (msg.type) {
+    case 'offer':
+      showIncomingPrompt(msg);
+      break;
     case 'accept':
       startSendLoop(msg.transferId);
       break;
@@ -76,17 +129,43 @@ function onControl(msg) {
       outgoing.delete(msg.transferId);
       break;
     case 'cancel': {
-      const entry = outgoing.get(msg.transferId);
-      if (entry) entry.cancelled = true;
-      updateLog(msg.transferId, null, msg.reason || 'cancelled', 'failed');
+      const out = outgoing.get(msg.transferId);
+      if (out) out.cancelled = true;
       outgoing.delete(msg.transferId);
+      incoming.delete(msg.transferId);
+      updateLog(msg.transferId, null, msg.reason || 'cancelled', 'failed');
       break;
     }
+    case 'transfer-complete':
+      finishReceive(msg.transferId);
+      break;
   }
 }
 
-function onBinary(_buf) {
-  // wired up in Task 16
+function finishReceive(transferId) {
+  const entry = incoming.get(transferId);
+  if (!entry) return;
+  const blob = new Blob(entry.chunks, { type: entry.offer.mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = entry.offer.filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  updateLog(transferId, 100, 'saved', 'done');
+  incoming.delete(transferId);
+}
+
+function onBinary(buf) {
+  const transferId = transferIdFromFrame(buf);
+  const entry = incoming.get(transferId);
+  if (!entry) return;
+  const payload = buf.slice(HEADER_SIZE);
+  entry.chunks.push(payload);
+  entry.received += payload.byteLength;
+  updateLog(transferId, Math.floor((entry.received / entry.offer.size) * 100));
 }
 
 const drop = document.getElementById('drop');
