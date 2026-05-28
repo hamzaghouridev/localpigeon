@@ -100,7 +100,7 @@ export function createWsServer(httpServer) {
           sendJson(ws, { type: 'cancel', transferId: msg.transferId, reason: 'peer-not-found' });
           return;
         }
-        pendingOffers.set(msg.transferId, { senderWs: ws });
+        pendingOffers.set(msg.transferId, { senderWs: ws, receiverWs: dest.ws });
         sendJson(dest.ws, {
           type: 'offer',
           transferId: msg.transferId,
@@ -116,6 +116,7 @@ export function createWsServer(httpServer) {
       if (msg.type === 'accept') {
         const entry = pendingOffers.get(msg.transferId);
         if (!entry) return;
+        if (entry.receiverWs !== ws) return;
         pendingOffers.delete(msg.transferId);
         transfers.set(msg.transferId, { senderWs: entry.senderWs, receiverWs: ws });
         sendJson(entry.senderWs, { type: 'accept', transferId: msg.transferId });
@@ -125,6 +126,7 @@ export function createWsServer(httpServer) {
       if (msg.type === 'reject') {
         const entry = pendingOffers.get(msg.transferId);
         if (!entry) return;
+        if (entry.receiverWs !== ws) return;
         pendingOffers.delete(msg.transferId);
         sendJson(entry.senderWs, { type: 'reject', transferId: msg.transferId });
         return;
@@ -143,6 +145,7 @@ export function createWsServer(httpServer) {
       if (msg.type === 'transfer-complete') {
         const entry = transfers.get(msg.transferId);
         if (!entry) return;
+        if (entry.senderWs !== ws) return;
         transfers.delete(msg.transferId);
         sendJson(entry.receiverWs, { type: 'transfer-complete', transferId: msg.transferId });
         return;
