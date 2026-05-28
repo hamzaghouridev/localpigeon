@@ -77,6 +77,23 @@ export function createWsServer(httpServer) {
     broadcastPeerList(registry, wss);
 
     ws.on('close', () => {
+      for (const [transferId, entry] of transfers) {
+        if (entry.senderWs === ws) {
+          sendJson(entry.receiverWs, { type: 'cancel', transferId, reason: 'sender-disconnected' });
+          transfers.delete(transferId);
+        } else if (entry.receiverWs === ws) {
+          sendJson(entry.senderWs, { type: 'cancel', transferId, reason: 'receiver-disconnected' });
+          transfers.delete(transferId);
+        }
+      }
+      for (const [transferId, entry] of pendingOffers) {
+        if (entry.senderWs === ws) {
+          pendingOffers.delete(transferId);
+        } else if (entry.receiverWs === ws) {
+          sendJson(entry.senderWs, { type: 'cancel', transferId, reason: 'receiver-disconnected' });
+          pendingOffers.delete(transferId);
+        }
+      }
       registry.remove(ws);
       broadcastPeerList(registry, wss);
     });
