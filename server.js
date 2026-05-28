@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { PeerRegistry } from './lib/registry.js';
+import { parseBinaryHeader } from './lib/protocol.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -81,7 +82,17 @@ export function createWsServer(httpServer) {
     });
 
     ws.on('message', (data, isBinary) => {
-      if (isBinary) return; // binary handled in Task 8
+      if (isBinary) {
+        let parsed;
+        try { parsed = parseBinaryHeader(data); }
+        catch { return; }
+        const entry = transfers.get(parsed.transferId);
+        if (!entry || entry.senderWs !== ws) return;
+        if (entry.receiverWs.readyState === entry.receiverWs.OPEN) {
+          entry.receiverWs.send(data, { binary: true });
+        }
+        return;
+      }
       if (data.length > MAX_CONTROL_BYTES) { ws.close(); return; }
 
       let msg;
