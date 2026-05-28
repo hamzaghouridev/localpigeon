@@ -1,3 +1,7 @@
+const CHUNK_SIZE = 64 * 1024;
+const HIGH_WATER = 1024 * 1024;
+const HEADER_SIZE = 16;
+
 const me = document.getElementById('me');
 const peerList = document.getElementById('peer-list');
 const peersEmpty = document.getElementById('peers-empty');
@@ -146,6 +150,14 @@ function onControl(msg) {
       const qIdx = offerQueue.findIndex(o => o.transferId === msg.transferId);
       if (qIdx >= 0) offerQueue.splice(qIdx, 1);
       updateLog(msg.transferId, null, msg.reason || 'cancelled', 'failed');
+      if (incomingDialog.open) {
+        if (offerQueue.length > 0) {
+          incomingDialog.close();
+          setTimeout(showNextOffer, 0);
+        } else {
+          incomingDialog.close();
+        }
+      }
       break;
     }
     case 'transfer-complete':
@@ -186,10 +198,6 @@ const drop = document.getElementById('drop');
 const browseBtn = document.getElementById('browse');
 const fileInput = document.getElementById('file-input');
 const transferLog = document.getElementById('transfer-log');
-
-const CHUNK_SIZE = 64 * 1024;
-const HIGH_WATER = 1024 * 1024;
-const HEADER_SIZE = 16;
 
 const outgoing = new Map();
 

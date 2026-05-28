@@ -21,7 +21,7 @@ const MIME = {
 async function serveStatic(req, res) {
   const url = req.url === '/' ? '/index.html' : req.url;
   const filePath = path.join(PUBLIC_DIR, url);
-  if (!filePath.startsWith(PUBLIC_DIR)) {
+  if (!filePath.startsWith(PUBLIC_DIR + path.sep)) {
     res.writeHead(403).end();
     return;
   }
