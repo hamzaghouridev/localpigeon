@@ -74,7 +74,7 @@ const acceptBtn = document.getElementById('incoming-accept');
 const rejectBtn = document.getElementById('incoming-reject');
 
 const incoming = new Map();
-let pendingOffer = null;
+const offerQueue = [];
 
 function humanSize(bytes) {
   const units = ['B', 'KB', 'MB', 'GB'];
@@ -91,7 +91,13 @@ function transferIdFromFrame(buf) {
 }
 
 function showIncomingPrompt(offer) {
-  pendingOffer = offer;
+  offerQueue.push(offer);
+  if (!incomingDialog.open) showNextOffer();
+}
+
+function showNextOffer() {
+  const offer = offerQueue[0];
+  if (!offer) return;
   incomingFrom.textContent = offer.fromName;
   incomingFile.textContent = offer.filename;
   incomingSize.textContent = humanSize(offer.size);
@@ -100,20 +106,24 @@ function showIncomingPrompt(offer) {
 
 acceptBtn.addEventListener('click', (e) => {
   e.preventDefault();
-  if (!pendingOffer) return;
-  const offer = pendingOffer; pendingOffer = null;
+  if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return;
+  const offer = offerQueue.shift();
+  if (!offer) return;
   incoming.set(offer.transferId, { offer, chunks: [], received: 0 });
   addLogRow(offer.transferId, `${offer.filename} ← ${offer.fromName}`);
   state.ws.send(JSON.stringify({ type: 'accept', transferId: offer.transferId }));
   incomingDialog.close();
+  setTimeout(showNextOffer, 0);
 });
 
 rejectBtn.addEventListener('click', (e) => {
   e.preventDefault();
-  if (!pendingOffer) return;
-  const offer = pendingOffer; pendingOffer = null;
+  if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return;
+  const offer = offerQueue.shift();
+  if (!offer) return;
   state.ws.send(JSON.stringify({ type: 'reject', transferId: offer.transferId }));
   incomingDialog.close();
+  setTimeout(showNextOffer, 0);
 });
 
 function onControl(msg) {
@@ -133,6 +143,8 @@ function onControl(msg) {
       if (out) out.cancelled = true;
       outgoing.delete(msg.transferId);
       incoming.delete(msg.transferId);
+      const qIdx = offerQueue.findIndex(o => o.transferId === msg.transferId);
+      if (qIdx >= 0) offerQueue.splice(qIdx, 1);
       updateLog(msg.transferId, null, msg.reason || 'cancelled', 'failed');
       break;
     }
@@ -165,7 +177,9 @@ function onBinary(buf) {
   const payload = buf.slice(HEADER_SIZE);
   entry.chunks.push(payload);
   entry.received += payload.byteLength;
-  updateLog(transferId, Math.floor((entry.received / entry.offer.size) * 100));
+  if (entry.offer.size > 0) {
+    updateLog(transferId, Math.floor((entry.received / entry.offer.size) * 100));
+  }
 }
 
 const drop = document.getElementById('drop');
