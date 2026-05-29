@@ -6,6 +6,8 @@ const me = document.getElementById('me');
 const peerList = document.getElementById('peer-list');
 const peersEmpty = document.getElementById('peers-empty');
 
+const canReceive = 'showSaveFilePicker' in window;
+
 const state = {
   peerId: null,
   name: null,
@@ -108,15 +110,35 @@ function showNextOffer() {
   incomingDialog.showModal();
 }
 
-acceptBtn.addEventListener('click', (e) => {
+acceptBtn.addEventListener('click', async (e) => {
   e.preventDefault();
   if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return;
   const offer = offerQueue.shift();
   if (!offer) return;
-  incoming.set(offer.transferId, { offer, chunks: [], received: 0 });
+  incomingDialog.close();
+
+  let writable;
+  try {
+    const handle = await window.showSaveFilePicker({ suggestedName: offer.filename });
+    writable = await handle.createWritable();
+  } catch {
+    // User dismissed the picker (or it failed): treat as a reject.
+    if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+      state.ws.send(JSON.stringify({ type: 'reject', transferId: offer.transferId }));
+    }
+    setTimeout(showNextOffer, 0);
+    return;
+  }
+
+  if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
+    await writable.abort();
+    setTimeout(showNextOffer, 0);
+    return;
+  }
+
+  incoming.set(offer.transferId, { offer, writable, writeQueue: Promise.resolve(), received: 0 });
   addLogRow(offer.transferId, `${offer.filename} ← ${offer.fromName}`);
   state.ws.send(JSON.stringify({ type: 'accept', transferId: offer.transferId }));
-  incomingDialog.close();
   setTimeout(showNextOffer, 0);
 });
 
@@ -146,7 +168,7 @@ function onControl(msg) {
       const out = outgoing.get(msg.transferId);
       if (out) out.cancelled = true;
       outgoing.delete(msg.transferId);
-      incoming.delete(msg.transferId);
+      if (incoming.has(msg.transferId)) abortReceive(msg.transferId);
       const qIdx = offerQueue.findIndex(o => o.transferId === msg.transferId);
       if (qIdx >= 0) offerQueue.splice(qIdx, 1);
       updateLog(msg.transferId, null, msg.reason || 'cancelled', 'failed');
@@ -166,20 +188,27 @@ function onControl(msg) {
   }
 }
 
-function finishReceive(transferId) {
+async function finishReceive(transferId) {
   const entry = incoming.get(transferId);
   if (!entry) return;
-  const blob = new Blob(entry.chunks, { type: entry.offer.mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = entry.offer.filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 30_000);
-  updateLog(transferId, 100, 'saved', 'done');
   incoming.delete(transferId);
+  try {
+    await entry.writeQueue;
+    await entry.writable.close();
+  } catch {
+    try { await entry.writable.abort(); } catch { /* already closed */ }
+    updateLog(transferId, null, 'write failed', 'failed');
+    return;
+  }
+  updateLog(transferId, 100, 'saved', 'done');
+}
+
+async function abortReceive(transferId) {
+  const entry = incoming.get(transferId);
+  if (!entry) return;
+  incoming.delete(transferId);
+  // Discard the partially written file — abort() commits nothing to the target.
+  try { await entry.writable.abort(); } catch { /* already closed/aborted */ }
 }
 
 function onBinary(buf) {
@@ -187,8 +216,17 @@ function onBinary(buf) {
   const entry = incoming.get(transferId);
   if (!entry) return;
   const payload = buf.slice(HEADER_SIZE);
-  entry.chunks.push(payload);
   entry.received += payload.byteLength;
+  // Serialize writes so frames land on disk in arrival order without buffering.
+  entry.writeQueue = entry.writeQueue.then(() => entry.writable.write(payload));
+  entry.writeQueue.catch(() => {
+    if (!incoming.has(transferId)) return;
+    if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+      state.ws.send(JSON.stringify({ type: 'cancel', transferId, reason: 'write-failed' }));
+    }
+    updateLog(transferId, null, 'write failed', 'failed');
+    abortReceive(transferId);
+  });
   if (entry.offer.size > 0) {
     updateLog(transferId, Math.floor((entry.received / entry.offer.size) * 100));
   }
@@ -290,5 +328,12 @@ drop.addEventListener('drop', (e) => {
 });
 browseBtn.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', () => pickFiles([...fileInput.files]));
+
+if (!canReceive) {
+  const banner = document.getElementById('unsupported');
+  if (banner) banner.hidden = false;
+  acceptBtn.disabled = true;
+  acceptBtn.title = 'Receiving requires Chrome or Edge';
+}
 
 connect();

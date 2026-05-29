@@ -10,9 +10,14 @@ The automated suite (`npm test`) covers the wire protocol and the in-process hap
 
 ## Round-trip with a large file
 
+Receiving requires Chrome or Edge (File System Access API). On Accept, the receiver picks a
+save location and chunks stream straight to that file — nothing is buffered in the tab.
+
 1. Send a file in the 200–500 MB range from device A to device B.
-2. Watch the host's memory in Activity Monitor / `top`. It should not climb in step with the file size.
-3. Verify the downloaded file matches: `shasum source.bin received.bin` on macOS / Linux.
+2. On B, click Accept and choose where to save.
+3. Watch B's browser memory (the tab's process in the browser task manager). It should stay
+   flat, not climb in step with the file size. The host's memory should also stay flat.
+4. Verify the saved file matches: `shasum source.bin received.bin` on macOS / Linux.
 
 ## Cancellation paths
 
@@ -25,6 +30,8 @@ The automated suite (`npm test`) covers the wire protocol and the in-process hap
 1. From device A, send file 1 to device B and file 2 to device C in quick succession.
 2. Both should complete with correct bytes.
 
-## Multiple browsers
+## Browser support
 
-Verify the app works in current Chrome, Safari, and Firefox.
+1. Open the page in Chrome or Edge — sending and receiving both work.
+2. Open the page in Safari or Firefox — an "needs Chrome or Edge to receive files" banner
+   shows, the Accept button is disabled, but sending still works.
