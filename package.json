@@ -1,7 +1,29 @@
 {
   "name": "localpigeon",
   "version": "0.1.0",
-  "description": "Share files between devices on the same WiFi from your browser.",
+  "description": "Self-hosted peer-to-peer file transfer over local WiFi, straight from the browser. A cross-platform AirDrop alternative with no cloud, no account, and no file size limit.",
+  "keywords": [
+    "file-transfer",
+    "p2p",
+    "peer-to-peer",
+    "airdrop",
+    "airdrop-alternative",
+    "local-file-sharing",
+    "websocket",
+    "self-hosted",
+    "lan",
+    "wifi",
+    "no-cloud"
+  ],
+  "homepage": "https://github.com/hamzaghouridev/localpigeon#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hamzaghouridev/localpigeon.git"
+  },
+  "bugs": {
+    "url": "https://github.com/hamzaghouridev/localpigeon/issues"
+  },
+  "author": "Hamza Ghouri",
   "type": "module",
   "main": "server.js",
   "scripts": {
