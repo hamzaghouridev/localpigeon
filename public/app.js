@@ -239,7 +239,15 @@ const transferLog = document.getElementById('transfer-log');
 
 const outgoing = new Map();
 
-function uuid() { return crypto.randomUUID(); }
+function uuid() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  // crypto.randomUUID is secure-context only; getRandomValues is not, so build v4 by hand.
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = [...b].map(x => x.toString(16).padStart(2, '0'));
+  return `${h.slice(0, 4).join('')}-${h.slice(4, 6).join('')}-${h.slice(6, 8).join('')}-${h.slice(8, 10).join('')}-${h.slice(10, 16).join('')}`;
+}
 
 function headerBytes(transferId) {
   const hex = transferId.replace(/-/g, '');

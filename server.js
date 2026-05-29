@@ -1,4 +1,5 @@
 import http from 'node:http';
+import https from 'node:https';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -6,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { PeerRegistry } from './lib/registry.js';
 import { parseBinaryHeader } from './lib/protocol.js';
+import { ensureCert } from './lib/cert.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -35,10 +37,9 @@ async function serveStatic(req, res) {
   }
 }
 
-export function createHttpServer() {
-  return http.createServer((req, res) => {
-    serveStatic(req, res);
-  });
+export function createHttpServer(tls) {
+  const handler = (req, res) => serveStatic(req, res);
+  return tls ? https.createServer(tls, handler) : http.createServer(handler);
 }
 
 const MAX_CONTROL_BYTES = 4096;
@@ -196,16 +197,20 @@ function lanAddress() {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const server = createHttpServer();
+  const lan = lanAddress();
+  const tls = ensureCert(lan);
+  const server = createHttpServer(tls);
   createWsServer(server);
   const port = Number(process.env.PORT) || 8080;
   server.listen(port, '0.0.0.0', () => {
-    const lan = lanAddress();
     console.log('');
-    console.log('  LocalPigeon is running');
+    console.log('  LocalPigeon is running (HTTPS)');
     console.log('');
-    console.log(`  On this device:   http://localhost:${port}`);
-    if (lan) console.log(`  Other devices:    http://${lan}:${port}`);
+    console.log(`  On this device:   https://localhost:${port}`);
+    if (lan) console.log(`  Other devices:    https://${lan}:${port}`);
+    console.log('');
+    console.log('  The cert is self-signed — your browser will warn once.');
+    console.log('  Click "Advanced" → "proceed" to continue.');
     console.log('');
   });
 }

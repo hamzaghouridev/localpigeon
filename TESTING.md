@@ -5,7 +5,8 @@ The automated suite (`npm test`) covers the wire protocol and the in-process hap
 ## LAN reachability
 
 1. Start the server on the host machine: `npm start`.
-2. From the printed LAN URL, open the page on a phone or second laptop on the same WiFi.
+2. From the printed `https://<lan-ip>` URL, open the page on a phone or second laptop on the
+   same WiFi. Accept the one-time self-signed certificate warning (Advanced → proceed).
 3. Verify the second device shows the host as a peer and vice versa.
 
 ## Round-trip with a large file
